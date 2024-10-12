@@ -138,9 +138,15 @@ def add_paddings(seq_in,seq_out):
         sout.append(temp)
     return sin,sout
 
-if __name__ == '__main__':
-    train,train_subtoken_mask,train_toks = tokenize_dataset(ENV_DATASET_TRAIN)
-    test, test_subtoken_mask, test_toks = tokenize_dataset(ENV_DATASET_TEST)
+def process(datasets):
+    if datasets == "atis":
+        dataset_train = atis_train_dev
+        dataset_test = atis_test
+    else:
+        dataset_train = snips_train_dev
+        dataset_test = snips_test
+    train,train_subtoken_mask,train_toks = tokenize_dataset(dataset_train)
+    test, test_subtoken_mask, test_toks = tokenize_dataset(dataset_test)
     #convert above array to separate lists
     seq_in,seq_out, intent = list(zip(*train))
     seq_in_test,seq_out_test, intent_test = list(zip(*test.copy()))
@@ -158,6 +164,7 @@ if __name__ == '__main__':
     sin_test,sout_test=add_paddings(seq_in_test,seq_out_test)
 
     # making dictionary (token:id), initial value
+    global word2index, tag2index, intent2index
     word2index = {'<PAD>': 0, '<UNK>':1,'<BOS>':2,'<EOS>':3,'<NUM>':4,'[cls]':5}
     # add rest of token list to dictionary
     for token in vocab:
@@ -186,3 +193,5 @@ if __name__ == '__main__':
     test_data=NLUDataset(sin_test,sout_test,intent_test,test_toks['input_ids'],test_toks['attention_mask'],test_toks['token_type_ids'],test_subtoken_mask)
     train_data = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
     test_data = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
+
+    return train_data, test_data, tag2index, intent2index

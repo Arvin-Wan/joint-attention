@@ -5,6 +5,7 @@ deberta_base = "./pretrain/deberta-v3-large"
 
 snips_train="./dataset/snips_train.iob"
 snips_test="./dataset/snips_test.iob"
+snips_train_dev = "./dataset/snips_train_dev.iob"
 atis_train="./dataset/atis-2.train.w-intent.iob"
 atis_test="./dataset/atis-2.test.w-intent.iob"
 atis_train_dev = "./dataset/atis-2.w-intent_train_dev.iob"

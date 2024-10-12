@@ -14,7 +14,6 @@ from torch.utils.data import Dataset, DataLoader
 import logging
 from tqdm.contrib.logging import logging_redirect_tqdm
 from config import *
-from Data_process import tag2index, intent2index
 
 # generates transformer mask
 def generate_square_subsequent_mask(sz: int) :
@@ -234,22 +233,22 @@ class Decoder(nn.Module):
 
 
 
-    def forward(self, input,encoder_outputs,encoder_maskings,bert_subtoken_maskings=None,infer=False):
+    def forward(self, input, encoder_outputs, encoder_maskings, bert_subtoken_maskings=None, infer=False, tag2index=None):
         # encoder outputs: BATCH,LENGTH,Dims (16,60,1024)
         batch_size = encoder_outputs.shape[0]
         length = encoder_outputs.size(1) #for every token in batches
         embedded = self.embedding(input)
 
 
-        encoder_outputs2=torch.transpose(encoder_outputs,dim0=1,dim1=2)
+        encoder_outputs2 = torch.transpose(encoder_outputs, dim0=1, dim1=2)
         encoder_outputs2 = self.activation2(self.dropout4(self.squeeze_linear(encoder_outputs2)))
-        encoder_outputs2 = torch.transpose(encoder_outputs2,dim0=1,dim1=2).mean(1)
+        encoder_outputs2 = torch.transpose(encoder_outputs2, dim0=1, dim1=2).mean(1)
         # encoder_outputs2 = torch.argmax(encoder_outputs,dim=1)
         intent_score = self.intent_out(self.dropout1(encoder_outputs2))
-        intent_score = F.log_softmax(intent_score,dim=1)   
+        intent_score = F.log_softmax(intent_score, dim=1)   
         # intent_score = self.IDclassifier(encoder_outputs)                     
 
-        newtensor = torch.cuda.FloatTensor(batch_size, length,ENV_HIDDEN_SIZE).fill_(0.) # size of newtensor same as original
+        newtensor = torch.cuda.FloatTensor(batch_size, length, ENV_HIDDEN_SIZE).fill_(0.) # size of newtensor same as original
         for i in range(batch_size): # per batch
             newtensor_index=0
             for j in range(length): # for each token
@@ -260,12 +259,12 @@ class Decoder(nn.Module):
         if infer==False:
             embedded=embedded*math.sqrt(ENV_HIDDEN_SIZE)
             embedded = self.pos_encoder(embedded)
-            zol = self.transformer_decoder(tgt=embedded,memory=newtensor
-                                           ,memory_mask=self.transformer_diagonal_mask
-                                           ,tgt_mask=self.transformer_mask)
+            zol = self.transformer_decoder(tgt=embedded, memory=newtensor
+                                           , memory_mask=self.transformer_diagonal_mask
+                                           , tgt_mask=self.transformer_mask)
 
             scores = self.slot_trans(self.dropout3(zol))    # B, S, 124
-            slot_scores = F.log_softmax(scores,dim=2)
+            slot_scores = F.log_softmax(scores, dim=2)
         else:
             bos = Variable(torch.LongTensor([[tag2index['<BOS>']]*batch_size])).cuda().transpose(1,0)
             bos = self.embedding(bos)
@@ -290,11 +289,13 @@ class Decoder(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self):
+    def __init__(self, tag2index, intent2index):
         super(Model, self).__init__()
         self.bert_layer = BertLayer()
         self.encoder = Encoder()
         self.decoder = Decoder(len(tag2index),len(intent2index))
+        self.intent2index = intent2index
+        self.tag2index = tag2index
 
     def forward(self,bert_tokens,bert_mask,bert_toktype,subtoken_mask,tag_target=None,infer=False):
         batch_size=bert_tokens.size(0)
@@ -302,7 +303,7 @@ class Model(nn.Module):
 
         encoder_output = self.encoder(bert_last_hidden=bert_hidden)
 
-        start_decode = Variable(torch.LongTensor([[tag2index['<BOS>']]*batch_size])).cuda().transpose(1,0)
+        start_decode = Variable(torch.LongTensor([[self.tag2index['<BOS>']]*batch_size])).cuda().transpose(1,0)
         
         if not infer:
             start_decode = torch.cat((start_decode,tag_target[:,:-1]),dim=1)
@@ -310,6 +311,6 @@ class Model(nn.Module):
         # tag score shape 960,124,  tag target 16,60
         # intent scoer shape 16,22,  intent target shape 16
         # tag_score, intent_score = self.decoder(start_decode,output,bert_mask==0,bert_subtoken_maskings=subtoken_mask,infer=infer)
-        tag_score, intent_score = self.decoder(start_decode,encoder_output,bert_mask==0,bert_subtoken_maskings=subtoken_mask,infer=infer)
+        tag_score, intent_score = self.decoder(start_decode,encoder_output,bert_mask==0,bert_subtoken_maskings=subtoken_mask,infer=infer,tag2index=self.tag2index)
 
         return tag_score, intent_score

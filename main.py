@@ -17,7 +17,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from config import *
 from model import Model
-from Data_process import train_data,test_data
+from Data_process import process
 
 
 def mask_important_tags(predictions,tags,masks):
@@ -105,7 +105,7 @@ def eval_loop():
 
     return postfix_dict, round(float(np.mean(sf_f1)),4), round(float(np.mean(id_precision)),4)
 
-def train_evaluate(STEP_SIZE):
+def train_evaluate():
     max_id_prec=0.
     max_sf_f1=0.
     max_id_prec_both=0.
@@ -141,12 +141,13 @@ def train_evaluate(STEP_SIZE):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-data", "",
+    parser.add_argument("-data",
                         default="atis", type=str, required=False,
                         help="Datasets")
     args = parser.parse_args()
+    train_data, test_data, tag2index, intent2index = process(args.data)
 
-    model = Model()
+    model = Model(tag2index, intent2index)
     if USE_CUDA:
         model.cuda()
 
@@ -158,6 +159,6 @@ if __name__ == '__main__':
     loss_function_3 = nn.L1Loss()
 
 
-    train_evaluate(STEP_SIZE)
+    train_evaluate()
     
 
