@@ -14,6 +14,8 @@ import re
 from torch.utils.data import Dataset, DataLoader
 import logging
 from tqdm.contrib.logging import logging_redirect_tqdm
+import importlib
+import numpy as np
 
 from config import *
 # from model import Model
@@ -150,12 +152,26 @@ if __name__ == '__main__':
                     default="model", type=str, required=False,
                     help="Model")
     args = parser.parse_args()
+    
+# you must use cuda to run this code. if this returns false, you can not proceed.
+    
+    if USE_CUDA:
+        print("You are using cuda. Good!")
+        torch.cuda.manual_seed(ENV_SEED)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    else:
+        torch.manual_seed(ENV_SEED)
+        print('You are NOT using cuda! Some problems may occur.')
+    np.random.seed(ENV_SEED)
+    random.seed(ENV_SEED)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     train_data, test_data, tag2index, intent2index = process(args.data)
 
-    if args.model == "model":
-        from model import Model
-    elif args.model == "model_1012":
-        from model_1012 import Model
+    module = importlib.import_module(args.model)
+    Model = getattr(module, "Model")
 
     model = Model(tag2index, intent2index)
     if USE_CUDA:
