@@ -16,7 +16,7 @@ import logging
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from config import *
-from model import Model
+# from model import Model
 from Data_process import process
 from crf import CRF
 
@@ -146,8 +146,16 @@ if __name__ == '__main__':
     parser.add_argument("-data",
                         default="atis", type=str, required=False,
                         help="Datasets")
+    parser.add_argument("-model",
+                    default="model", type=str, required=False,
+                    help="Model")
     args = parser.parse_args()
     train_data, test_data, tag2index, intent2index = process(args.data)
+
+    if args.model == "model":
+        from model import Model
+    elif args.model == "model_1012":
+        from model_1012 import Model
 
     model = Model(tag2index, intent2index)
     if USE_CUDA:
