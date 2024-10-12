@@ -18,6 +18,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from config import *
 from model import Model
 from Data_process import process
+from crf import CRF
 
 
 def mask_important_tags(predictions,tags,masks):
@@ -45,7 +46,8 @@ def train_loop(postfix_dict):
         tag_score, intent_score = model(bert_tokens,bert_mask,bert_toktype,subtoken_mask,tag_target)
 
         perd_intent = torch.argmax(intent_score,dim=1)
-        loss_1 = loss_function_1(tag_score,tag_target.view(-1))
+        tag_scores = tag_score.view(batch_size, LENGTH, -1)
+        loss_1 = - crf_log_likelihood.log_likelihood(tag_scores, tag_target, reduction="mean") + loss_function_1(tag_score,tag_target.view(-1))
         loss_2 = loss_function_2(intent_score,intent_target)
         # loss_3 = loss_function_3(perd_intent.float(),intent_target)
         loss = loss_1 + loss_2
@@ -86,8 +88,8 @@ def eval_loop():
             model.zero_grad()
             
             tag_score, intent_score = model(bert_tokens,bert_mask,bert_toktype,subtoken_mask,infer=True)
-            
-            loss_1 = loss_function_1(tag_score,tag_target.view(-1))
+            tag_scores = tag_score.view(batch_size, LENGTH, -1)
+            loss_1 = - crf_log_likelihood.log_likelihood(tag_scores, tag_target, reduction="mean") + loss_function_1(tag_score,tag_target.view(-1))
             loss_2 = loss_function_2(intent_score,intent_target)
             loss = loss_1 + loss_2
             loss_1es.append(loss_1.data.cpu().numpy() if USE_CUDA else loss_1.data.numpy()[0])
@@ -105,7 +107,7 @@ def eval_loop():
 
     return postfix_dict, round(float(np.mean(sf_f1)),4), round(float(np.mean(id_precision)),4)
 
-def train_evaluate():
+def train_evaluate(args):
     max_id_prec=0.
     max_sf_f1=0.
     max_id_prec_both=0.
@@ -134,9 +136,9 @@ def train_evaluate():
             epoiter.set_postfix(postfix_dict)
             epoiter.update(1)
         
-        print(f"max single ID PR: {max_id_prec}")
-        print(f"max single SF F1: {max_sf_f1}")
-        print(f"max mutual PR: {max_id_prec_both}   SF:{max_sf_f1_both}")
+        print(f"{args.data} max single ID PR: {max_id_prec}")
+        print(f"{args.data} max single SF F1: {max_sf_f1}")
+        print(f"{args.data} max mutual PR: {max_id_prec_both}   SF:{max_sf_f1_both}")
 
 
 if __name__ == '__main__':
@@ -154,11 +156,12 @@ if __name__ == '__main__':
     # global optimizer, scheduler, loss_function_1, loss_function_2, loss_function_3
     optimizer = optim.AdamW(model.parameters(), lr=0.0001,weight_decay=0.8)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.96)
+    crf_log_likelihood = CRF(num_tags=len(tag2index),batch_first=True).cuda()
     loss_function_1 = nn.CrossEntropyLoss(ignore_index=0)
     loss_function_2 = nn.CrossEntropyLoss()
     loss_function_3 = nn.L1Loss()
 
 
-    train_evaluate()
+    train_evaluate(args)
     
 
