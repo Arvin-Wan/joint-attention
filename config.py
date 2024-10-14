@@ -1,4 +1,3 @@
-_fn="final" # file unique id for saving and loading models
 bert_base='./pretrain/bert-base-uncased/'
 bert_large='./pretrain/bert-large-uncased/'
 deberta_base = "./pretrain/deberta-v3-large"
@@ -28,18 +27,4 @@ STEP_SIZE=50
 ENV_SEED=1331
 
 import torch
-import numpy as np
-# you must use cuda to run this code. if this returns false, you can not proceed.
 USE_CUDA = torch.cuda.is_available()
-if USE_CUDA:
-    print("You are using cuda. Good!")
-    torch.cuda.manual_seed(ENV_SEED)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-else:
-    torch.manual_seed(ENV_SEED)
-    print('You are NOT using cuda! Some problems may occur.')
-np.random.seed(ENV_SEED)
-# random.seed(ENV_SEED)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False

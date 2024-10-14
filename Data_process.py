@@ -194,4 +194,18 @@ def process(datasets):
     train_data = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
     test_data = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
 
-    return train_data, test_data, tag2index, intent2index
+    data_dict ={
+        "train_data": train_data,
+        "test_data": test_data,
+        "tag2index": tag2index,
+        "intent2index": intent2index,
+        "test": test,
+        "test_subtoken_mask": test_subtoken_mask,
+        "test_toks": test_toks,
+        "word2index": word2index,
+        "index2word": index2word,
+        "index2tag": index2tag,
+        "index2intent": index2intent        
+    }
+
+    return data_dict

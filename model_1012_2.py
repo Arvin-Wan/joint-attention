@@ -135,7 +135,7 @@ class Encoder(nn.Module):
         output = torch.cat((convolve1, convolve2,convolve3,convolve4), dim=2)
 
         output = self.layer_norm(self.dropout(output)) + bert_last_hidden
-        output = self.senet(output)
+        # output = self.senet(output)
         return output
 
 
@@ -233,7 +233,7 @@ class Decoder(nn.Module):
 
 
 
-    def forward(self, input, encoder_outputs, encoder_maskings, bert_subtoken_maskings=None, infer=False, tag2index=None):
+    def forward(self, input, encoder_outputs, encoder_maskings, bert_subtoken_maskings=None, infer=False, tag2index=None,bert_pooler_output=None):
         # encoder outputs: BATCH,LENGTH,Dims (16,60,1024)
         batch_size = encoder_outputs.shape[0]
         length = encoder_outputs.size(1) #for every token in batches
@@ -244,7 +244,7 @@ class Decoder(nn.Module):
         encoder_outputs2 = self.activation2(self.dropout4(self.squeeze_linear(encoder_outputs2)))
         encoder_outputs2 = torch.transpose(encoder_outputs2, dim0=1, dim1=2).mean(1)
         # encoder_outputs2 = torch.argmax(encoder_outputs,dim=1)
-        intent_score = self.intent_out(self.dropout1(encoder_outputs2))
+        intent_score = self.intent_out(self.dropout1(encoder_outputs2 + bert_pooler_output))
         intent_score = F.log_softmax(intent_score, dim=1)   
         # intent_score = self.IDclassifier(encoder_outputs)                     
 
@@ -293,13 +293,13 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.bert_layer = BertLayer()
         self.encoder = Encoder()
-        self.decoder = Decoder(len(tag2index),len(intent2index))
+        self.decoder = Decoder(len(tag2index), len(intent2index), ratio_squeeze=kwargs.get("id_ratio_squeeze", 4))
         self.intent2index = intent2index
         self.tag2index = tag2index
 
     def forward(self,bert_tokens,bert_mask,bert_toktype,subtoken_mask,tag_target=None,infer=False):
         batch_size=bert_tokens.size(0)
-        bert_hidden,_ = self.bert_layer(bert_info=(bert_tokens,bert_mask,bert_toktype))
+        bert_hidden,bert_pooler_output = self.bert_layer(bert_info=(bert_tokens,bert_mask,bert_toktype))
 
         encoder_output = self.encoder(bert_last_hidden=bert_hidden)
 
@@ -311,6 +311,6 @@ class Model(nn.Module):
         # tag score shape 960,124,  tag target 16,60
         # intent scoer shape 16,22,  intent target shape 16
         # tag_score, intent_score = self.decoder(start_decode,output,bert_mask==0,bert_subtoken_maskings=subtoken_mask,infer=infer)
-        tag_score, intent_score = self.decoder(start_decode,encoder_output,bert_mask==0,bert_subtoken_maskings=subtoken_mask,infer=infer,tag2index=self.tag2index)
+        tag_score, intent_score = self.decoder(start_decode,encoder_output,bert_mask==0,bert_subtoken_maskings=subtoken_mask,infer=infer,tag2index=self.tag2index,bert_pooler_output=bert_pooler_output)
 
         return tag_score, intent_score

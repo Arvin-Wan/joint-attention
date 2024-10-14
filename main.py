@@ -1,3 +1,5 @@
+import os, sys
+os.chdir(sys.path[0])
 import torch
 import argparse
 import torch.nn as nn
@@ -19,9 +21,22 @@ import numpy as np
 
 from config import *
 # from model import Model
-from Data_process import process
+from Data_process import process, prepare_sequence
 from crf import CRF
 
+def removepads(toks,clip=False):
+    global clipindex
+    result = toks.copy()
+    for i,t in enumerate(toks):
+        if t=="<PAD>":
+            result.remove(t)
+        elif t=="<EOS>":
+            result.remove(t)
+            if not clip:
+                clipindex=i
+    if clip:
+        result=result[:clipindex]
+    return result
 
 def mask_important_tags(predictions,tags,masks):
     result_tags=[]
@@ -141,7 +156,47 @@ def train_evaluate(args):
         print(f"{args.data} max single ID PR: {max_id_prec}")
         print(f"{args.data} max single SF F1: {max_sf_f1}")
         print(f"{args.data} max mutual PR: {max_id_prec_both}   SF:{max_sf_f1_both}")
+    
+    if args.is_test:
+        test_output_intent_wrong(args)
 
+def test_output_intent_wrong(args):
+    best_model_path = args.get("saved_path", "models/model.pkl")
+    model.load_state_dict(torch.load(best_model_path).state_dict())
+    if USE_CUDA:
+        model = model.cuda()
+    print("Instances where model predicted intent wrong")
+    model.eval()
+    total_wrong_predicted_intents = 0
+    with torch.no_grad():
+        for i in range(len(test)):
+            index = i
+            test_raw = test[index][0]
+            bert_tokens = test_toks['input_ids'][index].unsqueeze(0).cuda()
+            bert_mask = test_toks['attention_mask'][index].unsqueeze(0).cuda()
+            bert_toktype = test_toks['token_type_ids'][index].unsqueeze(0).cuda()
+            subtoken_mask = test_subtoken_mask[index].unsqueeze(0).cuda()
+            test_in = prepare_sequence(test_raw,word2index)
+            # test_mask = Variable(torch.BoolTensor(tuple(map(lambda s: s ==0, test_in.data)))).cuda() if USE_CUDA else Variable(torch.ByteTensor(tuple(map(lambda s: s ==0, test_in.data)))).view(1,-1)
+            # print(removepads(test_raw))
+            # start_decode = Variable(torch.LongTensor([[word2index['<BOS>']]*1])).cuda().transpose(1,0) if USE_CUDA else Variable(torch.LongTensor([[word2index['<BOS>']]*1])).transpose(1,0)
+            test_raw = [removepads(test_raw)]
+            
+            tag_score, intent_score = model(bert_tokens,bert_mask,bert_toktype,subtoken_mask,infer=True)
+
+            v,i = torch.max(intent_score,1)
+            if test[index][2]!=index2intent[i.data.tolist()[0]]:
+                v,i = torch.max(tag_score,1)
+                print("Sentence           : ",*test_raw[0])
+                print("Tag Truth          : ", *test[index][1][:len(test_raw[0])])
+                print("Tag Prediction     : ",*list(map(lambda ii:index2tag[ii],i.data.tolist()))[:len(test_raw[0])])
+                v,i = torch.max(intent_score,1)
+                print("Intent Truth       : ", test[index][2])
+                print("Intent Prediction  : ",index2intent[i.data.tolist()[0]])
+                print("--------------------------------------")
+                total_wrong_predicted_intents+=1
+
+    print("Total instances of wrong intent prediction is ",total_wrong_predicted_intents)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -151,6 +206,13 @@ if __name__ == '__main__':
     parser.add_argument("-model",
                     default="model", type=str, required=False,
                     help="Model")
+    parser.add_argument("-id_ratio_squeeze",
+                    default=4, type=int, required=False,
+                    help="id_ratio_squeeze")
+    parser.add_argument("-is_test",
+                    default=True, type=bool, required=False,
+                    help="Output intent wrong")    
+    
     args = parser.parse_args()
     
 # you must use cuda to run this code. if this returns false, you can not proceed.
@@ -168,22 +230,34 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    train_data, test_data, tag2index, intent2index = process(args.data)
+    data_dict = process(args.data)
+    tag2index = data_dict["tag2index"]
+    intent2index = data_dict["intent2index"]
+    train_data =  data_dict["train_data"]
+    test_data =  data_dict["test_data"]
+    test = data_dict["test"]
+    test_toks = data_dict["test_toks"]
+    test_subtoken_mask = data_dict["test_subtoken_mask"]
+    word2index = data_dict["word2index"]
+    index2tag = data_dict["index2tag"]
+    index2intent = data_dict["index2intent"]
 
     module = importlib.import_module(args.model)
     Model = getattr(module, "Model")
 
-    model = Model(tag2index, intent2index)
+
+    model = Model(tag2index, intent2index, id_ratio_squeeze=args.id_ratio_squeeze)
     if USE_CUDA:
         model.cuda()
 
-    # global optimizer, scheduler, loss_function_1, loss_function_2, loss_function_3
     optimizer = optim.AdamW(model.parameters(), lr=0.0001,weight_decay=0.8)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.96)
     crf_log_likelihood = CRF(num_tags=len(tag2index),batch_first=True).cuda()
     loss_function_1 = nn.CrossEntropyLoss(ignore_index=0)
     loss_function_2 = nn.CrossEntropyLoss()
     loss_function_3 = nn.L1Loss()
+
+    clipindex=0
 
 
     train_evaluate(args)
