@@ -158,10 +158,10 @@ def train_evaluate(args):
         print(f"{args.data} max mutual PR: {max_id_prec_both}   SF:{max_sf_f1_both}")
     
     if args.is_test:
-        test_output_intent_wrong(args)
+        test_output_intent_wrong(args, model)
 
-def test_output_intent_wrong(args):
-    best_model_path = args.get("saved_path", "models/model.pkl")
+def test_output_intent_wrong(args, model):
+    best_model_path = args.saved_path
     model.load_state_dict(torch.load(best_model_path).state_dict())
     if USE_CUDA:
         model = model.cuda()
@@ -204,14 +204,17 @@ if __name__ == '__main__':
                         default="atis", type=str, required=False,
                         help="Datasets")
     parser.add_argument("-model",
-                    default="model", type=str, required=False,
+                    default="model_1014", type=str, required=False,
                     help="Model")
     parser.add_argument("-id_ratio_squeeze",
                     default=4, type=int, required=False,
                     help="id_ratio_squeeze")
     parser.add_argument("-is_test",
                     default=True, type=bool, required=False,
-                    help="Output intent wrong")    
+                    help="Output intent wrong")
+    parser.add_argument("-saved_path",
+                    default="models/model.pkl", type=str, required=False,
+                    help="saved model path")    
     
     args = parser.parse_args()
     
@@ -245,7 +248,6 @@ if __name__ == '__main__':
     module = importlib.import_module(args.model)
     Model = getattr(module, "Model")
 
-
     model = Model(tag2index, intent2index, id_ratio_squeeze=args.id_ratio_squeeze)
     if USE_CUDA:
         model.cuda()
@@ -256,10 +258,9 @@ if __name__ == '__main__':
     loss_function_1 = nn.CrossEntropyLoss(ignore_index=0)
     loss_function_2 = nn.CrossEntropyLoss()
     loss_function_3 = nn.L1Loss()
-
     clipindex=0
 
-
     train_evaluate(args)
+
     
 

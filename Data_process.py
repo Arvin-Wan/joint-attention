@@ -142,9 +142,16 @@ def process(datasets):
     if datasets == "atis":
         dataset_train = atis_train_dev
         dataset_test = atis_test
-    else:
+    elif datasets == "snips":
         dataset_train = snips_train_dev
         dataset_test = snips_test
+    elif datasets == "MixATIS":
+        dataset_train = MixATIS_clean_train
+        dataset_test = MixATIS_clean_test
+    elif datasets == "MixSNIPS":
+        dataset_train = MixSNIPS_clean_train
+        dataset_test = MixSNIPS_clean_test 
+    
     train,train_subtoken_mask,train_toks = tokenize_dataset(dataset_train)
     test, test_subtoken_mask, test_toks = tokenize_dataset(dataset_test)
     #convert above array to separate lists
